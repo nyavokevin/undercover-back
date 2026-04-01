@@ -1,7 +1,16 @@
-import { Body, Controller, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { JoinRoomDto } from './dto/join-room.dto';
+import { UpdateRoomStatusDto } from './dto/update-room-status.dto';
 import { RoomsGateway } from './rooms.gateway';
 import { RoomsService } from './rooms.service';
 
@@ -60,5 +69,38 @@ export class RoomsController {
       code: room.code,
       players: room.players,
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':code')
+  async getRoomInfo(@Param('code') code: string) {
+    return this.roomsService.getRoomInfo(code);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':code/status')
+  async updateRoomStatus(
+    @Param('code') code: string,
+    @Body() body: UpdateRoomStatusDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const room = await this.roomsService.updateRoomStatus(
+      req.user,
+      code,
+      body.status,
+    );
+
+    this.roomsGateway.emitRoomUpdated(room.code, {
+      roomId: room.roomId,
+      code: room.code,
+      status: room.status,
+      players: room.players.map((player) => ({
+        userId: player.userId,
+        username: player.username,
+        isHost: player.isHost,
+      })),
+    });
+
+    return room;
   }
 }

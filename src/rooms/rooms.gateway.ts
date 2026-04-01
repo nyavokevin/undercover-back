@@ -26,6 +26,9 @@ type RoomCreatedPayload = {
 };
 
 type RoomUpdatedPayload = {
+  roomId?: string;
+  code?: string;
+  status?: string;
   players: Array<{
     userId: number;
     username: string;

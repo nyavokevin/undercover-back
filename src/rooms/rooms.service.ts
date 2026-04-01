@@ -23,6 +23,155 @@ export class RoomsService {
     RoomStatus.IN_PROGRESS,
   ];
 
+  private mapRoomDetails(room: {
+    id: string;
+    code: string;
+    hostId?: number;
+    status: RoomStatus;
+    maxPlayers: number;
+    createdAt: Date;
+    updatedAt: Date;
+    host: {
+      id: number;
+      username: string;
+    };
+    players: Array<{
+      isHost: boolean;
+      createdAt: Date;
+      user: {
+        id: number;
+        username: string;
+      };
+    }>;
+  }) {
+    return {
+      roomId: room.id,
+      code: room.code,
+      status: room.status,
+      config: {
+        maxPlayers: room.maxPlayers,
+      },
+      host: {
+        userId: room.host.id,
+        username: room.host.username,
+      },
+      players: room.players.map((player) => ({
+        userId: player.user.id,
+        username: player.user.username,
+        isHost: player.isHost,
+        joinedAt: player.createdAt,
+      })),
+      createdAt: room.createdAt,
+      updatedAt: room.updatedAt,
+    };
+  }
+
+  private async findRoomWithDetails(roomCode: string) {
+    return this.prisma.room.findUnique({
+      where: {
+        code: roomCode.trim().toUpperCase(),
+      },
+      include: {
+        host: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+        players: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+  }
+
+  async getRoomInfo(roomCode: string) {
+    const room = await this.findRoomWithDetails(roomCode);
+
+    if (!room) {
+      throw new NotFoundException('ROOM_NOT_FOUND');
+    }
+
+    return this.mapRoomDetails(room);
+  }
+
+  async updateRoomStatus(
+    user: AuthenticatedUser,
+    roomCode: string,
+    status: RoomStatus,
+  ) {
+    const room = await this.findRoomWithDetails(roomCode);
+
+    if (!room) {
+      throw new NotFoundException('ROOM_NOT_FOUND');
+    }
+
+    if (room.hostId !== user.id) {
+      throw new ConflictException('ONLY_HOST_CAN_UPDATE_ROOM_STATUS');
+    }
+
+    if (room.status === status) {
+      return this.mapRoomDetails(room);
+    }
+
+    if (room.status === RoomStatus.FINISHED) {
+      throw new BadRequestException('ROOM_ALREADY_FINISHED');
+    }
+
+    if (room.status === RoomStatus.WAITING && status === RoomStatus.FINISHED) {
+      throw new BadRequestException('INVALID_ROOM_STATUS_TRANSITION');
+    }
+
+    if (
+      room.status === RoomStatus.IN_PROGRESS &&
+      status === RoomStatus.WAITING
+    ) {
+      throw new BadRequestException('INVALID_ROOM_STATUS_TRANSITION');
+    }
+
+    const updatedRoom = await this.prisma.room.update({
+      where: {
+        id: room.id,
+      },
+      data: {
+        status,
+      },
+      include: {
+        host: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+        players: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+
+    return this.mapRoomDetails(updatedRoom);
+  }
+
   async createRoom(user: AuthenticatedUser, maxPlayers = 8) {
     const activeMembership = await this.prisma.player.findFirst({
       where: {
