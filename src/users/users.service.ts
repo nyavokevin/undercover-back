@@ -1,15 +1,16 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../prisma/prisma.service';
 import { User } from './user.entity';
 
-export type SafeUser = Omit<User, 'passwordHash'>;
+export type SafeUser = Pick<User, 'id' | 'username' | 'email'>;
 
 @Injectable()
 export class UsersService {
-  private readonly users: User[] = [];
+  constructor(private readonly prisma: PrismaService) {}
 
-  async findByEmail(email: string): Promise<User | undefined> {
-    return this.users.find((user) => user.email === email);
+  async findByEmail(email: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { email } });
   }
 
   async create(
@@ -24,14 +25,13 @@ export class UsersService {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const user: User = {
-      id: Date.now(),
-      username,
-      email,
-      passwordHash,
-    };
-
-    this.users.push(user);
+    const user = await this.prisma.user.create({
+      data: {
+        username,
+        email,
+        passwordHash,
+      },
+    });
 
     return this.toSafeUser(user);
   }
