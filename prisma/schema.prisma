@@ -13,4 +13,37 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  hostedRooms  Room[]   @relation("HostedRooms")
+  players      Player[]
+}
+
+enum RoomStatus {
+  WAITING
+  IN_PROGRESS
+  FINISHED
+}
+
+model Room {
+  id         String     @id @default(cuid())
+  code       String     @unique
+  hostId     Int
+  status     RoomStatus @default(WAITING)
+  maxPlayers Int
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  host       User       @relation("HostedRooms", fields: [hostId], references: [id])
+  players    Player[]
+}
+
+model Player {
+  id        String   @id @default(cuid())
+  userId    Int
+  roomId    String
+  isHost    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+  room      Room     @relation(fields: [roomId], references: [id])
+
+  @@unique([userId, roomId])
 }
