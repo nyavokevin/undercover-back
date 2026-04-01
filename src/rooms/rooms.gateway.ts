@@ -25,6 +25,14 @@ type RoomCreatedPayload = {
   }>;
 };
 
+type RoomUpdatedPayload = {
+  players: Array<{
+    userId: number;
+    username: string;
+    isHost: boolean;
+  }>;
+};
+
 @WebSocketGateway({ cors: { origin: '*' } })
 export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -48,7 +56,8 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const payload = this.jwtService.verify<JwtUserPayload>(token, {
         secret:
-          this.configService.get<string>('JWT_SECRET') ?? 'development-jwt-secret',
+          this.configService.get<string>('JWT_SECRET') ??
+          'development-jwt-secret',
       });
 
       client.data.userId = payload.sub;
@@ -89,12 +98,18 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     await Promise.all(
-      [...sockets].map((socketId) => this.server.sockets.sockets.get(socketId)?.join(`room:${roomCode}`)),
+      [...sockets].map((socketId) =>
+        this.server.sockets.sockets.get(socketId)?.join(`room:${roomCode}`),
+      ),
     );
   }
 
   emitRoomCreated(roomCode: string, payload: RoomCreatedPayload) {
     this.server.to(`room:${roomCode}`).emit('room_created', payload);
+  }
+
+  emitRoomUpdated(roomCode: string, payload: RoomUpdatedPayload) {
+    this.server.to(`room:${roomCode}`).emit('room_updated', payload);
   }
 
   private extractToken(client: Socket): string | null {
@@ -106,7 +121,10 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const authorization = client.handshake.headers.authorization;
 
-    if (typeof authorization === 'string' && authorization.startsWith('Bearer ')) {
+    if (
+      typeof authorization === 'string' &&
+      authorization.startsWith('Bearer ')
+    ) {
       return authorization.slice(7);
     }
 
